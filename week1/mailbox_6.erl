@@ -18,5 +18,21 @@ receive_loop() ->
     end.
 
 
+orderProcessMess() ->
+    spawn(fun() -> order_loop(first) end).
 
+getNextTag(Tag) ->
+    if 
+        Tag =:= first ->
+            second;
+        true ->
+            first
+    end.
+
+order_loop(Tag) ->
+    receive
+        {Tag, Mes} ->
+            io:format("message: ~p~n", [Mes]),
+            order_loop(getNextTag(Tag))
+    end.
 
