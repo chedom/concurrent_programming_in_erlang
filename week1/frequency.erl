@@ -7,7 +7,7 @@
 %%   (c) Francesco Cesarini and Simon Thompson
 
 -module(frequency).
--export([start/0]).
+-export([start/0, allocate/0, deallocate/1]).
 %% These are the start functions used to create and
 %% initialize the server.
 start() ->
@@ -51,15 +51,31 @@ allocate({[Freq|Free], Allocated} = Init, Pid) ->
             {{Free, [{Freq, Pid}|Allocated]}, {ok, Freq}}
     end.
 
-deallocate({Free, Allocated}, {Freq, Pid} = Pair) ->
+deallocate({Free, Allocated}, {Freq, _Pid} = Pair) ->
     case lists:any(fun(El) -> El =:= Pair end, Allocated) of
         true ->
-            NewAllocated=lists:keydelete(Pid, 1, Allocated),
+            NewAllocated=lists:keydelete(Freq, 1, Allocated),
             {{[Freq|Free],  NewAllocated}, ok};
         false ->
             {{Free, Allocated}, {error, incorrect_params}}
     end.
 
+
+%% functional interface
+allocate() ->
+    frequency ! {request, self(), allocate},
+    receive
+        {reply, Reply} ->
+            Reply
+    end.
+
+deallocate(Freq) ->
+    frequency ! {request, self(), {deallocate, Freq}},
+    receive 
+        {reply, Reply} ->
+                Reply
+    end.
+%%
 nth([], _N) ->
     out_of_range;
 nth([X | _Xs], 0) ->
