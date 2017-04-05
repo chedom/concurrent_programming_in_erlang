@@ -7,7 +7,9 @@
 %%   (c) Francesco Cesarini and Simon Thompson
 
 -module(frequency).
--export([start/0, allocate/0, deallocate/1]).
+-export([start/0, allocate/0, deallocate/1, clear/0]).
+-define(CLIENT_TIME_OUT, 5000).
+-define(SERVER_TIME_OUT, 6000).
 %% These are the start functions used to create and
 %% initialize the server.
 start() ->
@@ -27,15 +29,17 @@ get_frequencies() -> [10,11,12,13,14,15].
 loop(Frequencies) ->
   receive
     {request, Pid, allocate} ->
-      {NewFrequencies, Reply} = allocate(Frequencies, Pid),
-      Pid ! {reply, Reply},
-      loop(NewFrequencies);
+          timer:sleep(?SERVER_TIME_OUT),
+          {NewFrequencies, Reply} = allocate(Frequencies, Pid),
+          Pid ! {reply, Reply},
+          loop(NewFrequencies);
     {request, Pid , {deallocate, Freq}} ->
+          timer:sleep(?SERVER_TIME_OUT),
           {NewFrequencies, Reply} = deallocate(Frequencies, {Freq, Pid}),
-      Pid ! {reply, Reply},
-      loop(NewFrequencies);
+          Pid ! {reply, Reply},
+          loop(NewFrequencies);
     {request, Pid, stop} ->
-      Pid ! {reply, stopped}
+          Pid ! {reply, stopped}
   end.
 
 %% The Internal Help Functions used to allocate and
@@ -44,12 +48,14 @@ loop(Frequencies) ->
 allocate({[], Allocated}, _Pid) ->
   {{[], Allocated}, {error, no_frequency}};
 allocate({[Freq|Free], Allocated} = Init, Pid) ->
-    case keyexist(Pid, 1, Allocated) of
-        true ->
-            {Init, {error, already_exist}};
+    case lists:keyfind(Pid, 2, Allocated) of
         false ->
-            {{Free, [{Freq, Pid}|Allocated]}, {ok, Freq}}
+            {{Free, [{Freq, Pid}|Allocated]}, {ok, Freq}};
+         _ ->
+            {Init, {error, already_exist}}
+
     end.
+
 
 deallocate({Free, Allocated}, {Freq, _Pid} = Pair) ->
     case lists:any(fun(El) -> El =:= Pair end, Allocated) of
@@ -63,33 +69,33 @@ deallocate({Free, Allocated}, {Freq, _Pid} = Pair) ->
 
 %% functional interface
 allocate() ->
+    clear(),
     frequency ! {request, self(), allocate},
     receive
         {reply, Reply} ->
             Reply
+    after ?CLIENT_TIME_OUT ->
+              ok
     end.
 
 deallocate(Freq) ->
+    clear(),
     frequency ! {request, self(), {deallocate, Freq}},
     receive 
         {reply, Reply} ->
                 Reply
+    after ?CLIENT_TIME_OUT ->
+              ok
     end.
 %%
-nth([], _N) ->
-    out_of_range;
-nth([X | _Xs], 0) ->
-    X;
-nth([_X | Xs], N) ->
-    nth(Xs, N-1).
 
-keyexist(_K, _N, []) ->
-    false;
-keyexist(Key, Num, [X | Xs]) ->
-    case nth(erlang:tuple_to_list(X), Num) of
-        Key -> 
-            true;
-        _ -> 
-            keyexist(Key, Num, Xs)
+clear() ->
+    receive
+        Msg ->
+            io:format("Clear message:~p~n", [Msg]),
+            clear()
+    after 0 ->
+        ok
     end.
+
 
