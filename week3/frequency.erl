@@ -8,7 +8,8 @@
 
 -module(frequency).
 -export([start/0,allocate/0,deallocate/1,stop/0]).
--export([init/0]).
+-export([init_frequency_server/1]).
+-export([router_init/0]).
 
 %% These are the start functions used to create and
 %% initialize the server.
@@ -24,8 +25,9 @@ start() ->
 %%round robin server START
 %%
 router_init() ->
-    S1 = spawn(?MODULE, init_frequency_server, [1]),
-    S2 = spawn(?MODULE, init_frequency_server, [2]),
+    process_flag(trap_exit, true),
+    S1 = spawn_link(?MODULE, init_frequency_server, [1]),
+    S2 = spawn_link(?MODULE, init_frequency_server, [2]),
     router_loop([S1, S2], 1).
 
 router_loop(Servers, ServerNum) ->
@@ -36,14 +38,18 @@ router_loop(Servers, ServerNum) ->
             router_loop(Servers, get_next_num(Servers, ServerNum));
         {request, Pid, {deallocate, Freq}} ->
             SPid = find_server_by_frequency(Servers, Freq),
+            io:format("SPid ~p~n", [SPid]),
             SPid ! {request, self(), {deallocate, Freq}, Pid},
             router_loop(Servers, ServerNum);
         {reply, _From, Pid, Message} ->
-            Pid ! {reply, Message}
+            Pid ! {reply, Message},
+            router_loop(Servers, ServerNum);
+        {request, stop} ->
+            ok
     end.
 
 find_server_by_frequency(Servers, Freq) ->
-    [Server]  = lists:filter(
+    [{Server, _Num}]  = lists:filter(
                   fun({_X, Num}) -> lists:member(Freq, get_frequencies(Num)) end, 
                   lists:zip(Servers, lists:seq(1, length(Servers)))
                  ),
